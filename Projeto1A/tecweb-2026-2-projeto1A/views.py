@@ -1,4 +1,5 @@
 from database import Database
+from random import randint
 import locale
 import datetime
 from utils import add_note, load_data, load_template, build_response, extract_params
@@ -6,6 +7,9 @@ from utils import add_note, load_data, load_template, build_response, extract_pa
 
 def index(request):
     erro = ''
+    cores = ['#DAF7A6','#FFC300','#FF5733','#C70039','#900C3F','#581845']
+    i = randint(0,5)
+    cor = cores[i]
     # A string de request sempre começa com o tipo da requisição (ex: GET, POST)
     if request.startswith('POST'):
         params = extract_params(request)
@@ -29,7 +33,7 @@ def index(request):
         for dados in load_data()
     ]
     notes = '\n'.join(notes_li)
-    body = load_template('index.html').format(notes=notes, erro=erro)
+    body = load_template('index.html').format(notes=notes, erro=erro, cor=cor)
 
     return build_response(body=body)
 
