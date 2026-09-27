@@ -1,0 +1,23 @@
+{% extends "notes/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="appbar">
+  <img class="logo" src="{% static 'notes/img/logo-getit.png' %}">
+  <p>Como o Post-it, mas com outro verbo</p>
+</div>
+
+<main class="container">
+  <form class="form-card" method="post" action="{% url 'update' note.id %}">
+      {% csrf_token %}
+    <label for="titulo">Título</label>
+    <input class="form-card-title" id="titulo" type="text" name="titulo" value="{{ note.title }}" />
+    <label for="detalhes">Detalhes</label>
+    <textarea class="autoresize" id="detalhes" name="detalhes">{{ note.content }}</textarea>
+    <label for="tag">Tags (separadas por vírgula)</label>
+    <input class="form-card-title" id="tag" type="text" name="tag" value="{{ tags_texto }}" placeholder="tag1, tag2, tag3"/>
+    <input class="btn" type="submit" value="Atualizar"/>
+    <a href="{% url 'index' %}">Voltar</a>
+  </form>
+</main>
+{% endblock %}

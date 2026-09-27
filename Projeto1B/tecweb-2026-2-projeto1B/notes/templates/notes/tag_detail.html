@@ -1,0 +1,31 @@
+{% extends "notes/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="appbar">
+  <img class="logo" src="{% static 'notes/img/logo-getit.png' %}">
+  <p>Como o Post-it, mas com outro verbo</p>
+</div>
+
+<main class="container">
+    <h2>{{ tag.name }}</h2>
+
+    <ul class="card-container">
+      {% for note in notes %}
+      <li class="card">
+        <h3 class="card-title">{{note.title}}</h3>
+        {% for tag in note.tags.all %}
+          <a href="{% url 'tag_detail' tag.id %}">{{ tag.name }}</a>
+        {% endfor %}
+        <form method="post" action="{% url 'delete' note.id %}"> 
+          {% csrf_token %}
+          <button type="submit">Deletar</button>
+        </form>
+        <a href="{% url 'update' note.id %}">Editar</a>
+      </li>
+      {% endfor %}
+  </ul>
+  
+  <a href="{% url 'index' %}">Voltar</a>
+</main>
+{% endblock %}
