@@ -13,3 +13,7 @@ class Note(models.Model):
 
     def __str__(self):
         return f"{self.id}. {self.title}"
+
+class Pergunta(models.Model):
+    enunciado = models.TextField(null=False)
+    resposta_correta = models.BooleanField(null=False)
