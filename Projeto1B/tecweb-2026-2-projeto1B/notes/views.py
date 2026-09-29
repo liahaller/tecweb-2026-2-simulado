@@ -50,18 +50,20 @@ def tag_detail(request, tag_id):
 
 def perguntas(request):
     if request.method == 'POST':
+        categoria = Categoria.objects.get(id=request.POST.get('categoria'))
         enunciado = request.POST.get('enunciado')
         resposta = request.POST.get('resposta')
         if resposta == 'Verdadeiro':
             resposta = True
         else:
             resposta = False
-        pergunta = Pergunta(enunciado=enunciado, resposta_correta=resposta)
+        pergunta = Pergunta(enunciado=enunciado, resposta_correta=resposta, categoria=categoria)
         pergunta.save()
         return redirect('perguntas')
     else:
         all_perguntas = Pergunta.objects.all()
-        return render(request, 'notes/perguntas.html', {'perguntas':all_perguntas})
+        all_categorias = Categoria.objects.all()
+        return render(request, 'notes/perguntas.html', {'perguntas':all_perguntas, 'categorias':all_categorias})
 
 def categorias(request):
     if request.method == 'POST':

@@ -344,6 +344,79 @@ class Note(models.Model):
 
 `on_delete=models.CASCADE`: se apagar a categoria, apaga as perguntas dela junto.
 
+#### Passo a passo: um para muitos no código (exemplo Autor → Livro)
+
+> Um **autor** tem **vários** livros; cada **livro** tem **um** autor.
+
+**Regra de ouro:** a `ForeignKey` fica na classe do lado **"muitos"**. Pense assim: "cada livro tem UM autor", então o campo `autor` fica no `Livro`.
+
+**1) `models.py`**
+
+```python
+class Autor(models.Model):                  # o lado "um" vem PRIMEIRO no arquivo
+    nome = models.CharField(max_length=200)
+
+class Livro(models.Model):                  # o lado "muitos"
+    titulo = models.CharField(max_length=200)
+    autor = models.ForeignKey(Autor, on_delete=models.CASCADE, related_name='livros')
+```
+
+- `Autor` precisa estar **acima** de `Livro`, senão dá `NameError: name 'Autor' is not defined`. Alternativa: escrever `'Autor'` entre aspas.
+- No banco, o Django cria na tabela de livros uma coluna **`autor_id`** que guarda o **id** do autor.
+
+**2) Terminal**: `makemigrations` e depois `migrate`. Se já existem livros salvos, ele pergunta o valor para as linhas antigas: escolha `1` e digite o **id de um autor que existe** (veja a seção de migrations logo abaixo).
+
+**3) Template: o `<select>` manda o id**
+
+```django
+<select name="autor">
+  {% for autor in autores %}
+    <option value="{{ autor.id }}">{{ autor.nome }}</option>
+  {% endfor %}
+</select>
+```
+
+- O usuário **vê** o nome (`{{ autor.nome }}`), mas o navegador **envia** o `value`, que é o id: `autor=3`.
+- Para o `for` funcionar, a view precisa mandar `autores` no contexto do `render` (senão o select fica vazio).
+
+**4) View: transformar o id em objeto e salvar**
+
+```python
+from .models import Autor, Livro
+
+def livros(request):
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo')
+        autor_id = request.POST.get('autor')             # "3" (texto)
+        autor = Autor.objects.get(id=autor_id)           # busca o OBJETO autor
+        Livro.objects.create(titulo=titulo, autor=autor) # liga o livro ao autor
+        return redirect('livros')
+    else:
+        return render(request, 'app/livros.html', {
+            'livros': Livro.objects.all(),
+            'autores': Autor.objects.all(),              # para montar o <select>
+        })
+```
+
+(Atalho equivalente: `Livro.objects.create(titulo=titulo, autor_id=autor_id)`, passando direto o id.)
+
+**5) Mostrar a relação no template**
+
+```django
+{% for livro in livros %}
+  <li>{{ livro.titulo }} ({{ livro.autor.nome }})</li>    {# ida: livro → autor #}
+{% endfor %}
+
+{% for livro in autor.livros.all %} ... {% endfor %}       {# volta: autor → livros (related_name) #}
+```
+
+| Quero... | Código |
+|---|---|
+| O autor de um livro | `livro.autor` (é um objeto `Autor`) |
+| O nome do autor de um livro | `livro.autor.nome` |
+| Todos os livros de um autor | `autor.livros.all()` (graças ao `related_name='livros'`) |
+| Livros de um autor pelo filtro | `Livro.objects.filter(autor=autor)` |
+
 **Migrations:** o fluxo é `models.py` → `makemigrations` (gera `notes/migrations/000X_....py`) → `migrate` (altera o `db.sqlite3`).
 
 Se você adiciona um campo **obrigatório** num model que **já tem linhas** no banco, o `makemigrations` pergunta qual valor colocar nas linhas antigas:

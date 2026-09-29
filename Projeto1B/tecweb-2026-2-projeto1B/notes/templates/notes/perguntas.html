@@ -10,12 +10,17 @@
     <input type="text" name="enunciado"/>
     <label for="resposta">Resposta</label>
     <input name="resposta"/>
+    <select name="categoria">
+      {% for categoria in categorias %}
+        <option value="{{ categoria.id }}">{{categoria.nome}}</option>
+      {% endfor %}
+    </select>
     <input class="btn" type="submit" value="Criar"/>
   </form>
 
   <ul>
       {% for pergunta in perguntas %}
-        <li>{{pergunta.enunciado}}({{pergunta.resposta_correta}})</li>
+        <li>{{pergunta.enunciado}}({{pergunta.resposta_correta}}) ({{pergunta.categoria.nome}})</li>
       {% endfor %}
   </ul>
 </main>

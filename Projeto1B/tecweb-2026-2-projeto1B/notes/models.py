@@ -14,9 +14,11 @@ class Note(models.Model):
     def __str__(self):
         return f"{self.id}. {self.title}"
 
+class Categoria(models.Model):
+    nome = models.CharField()
+
 class Pergunta(models.Model):
     enunciado = models.TextField(null=False)
     resposta_correta = models.BooleanField(null=False)
-
-class Categoria(models.Model):
-    nome = models.CharField()
+    categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE, related_name='perguntas')
+    
