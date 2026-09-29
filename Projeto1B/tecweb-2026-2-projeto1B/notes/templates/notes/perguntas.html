@@ -12,5 +12,11 @@
     <input name="resposta"/>
     <input class="btn" type="submit" value="Criar"/>
   </form>
+
+  <ul>
+      {% for pergunta in perguntas %}
+        <li>{{pergunta.enunciado}}({{pergunta.resposta_correta}})</li>
+      {% endfor %}
+  </ul>
 </main>
 {% endblock %}

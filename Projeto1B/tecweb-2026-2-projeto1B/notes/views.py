@@ -60,7 +60,8 @@ def perguntas(request):
         pergunta.save()
         return redirect('perguntas')
     else:
-        return render(request, 'notes/perguntas.html')
+        all_perguntas = Pergunta.objects.all()
+        return render(request, 'notes/perguntas.html', {'perguntas':all_perguntas})
 
               
 
