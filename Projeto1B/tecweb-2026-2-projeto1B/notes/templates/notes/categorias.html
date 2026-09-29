@@ -1,0 +1,20 @@
+{% extends "notes/base.html" %}
+{% load static %}
+
+{% block content %}
+
+<main>
+  <form method="post" action="{% url 'categorias' %}" >
+    {% csrf_token %}
+    <label for="categoria">Categoria</label>
+    <input type="text" name="nome"/>
+    <input class="btn" type="submit" value="Criar"/>
+  </form>
+
+  <ul>
+      {% for categoria in categorias %}
+        <li>{{categoria.nome}}</li>
+      {% endfor %}
+  </ul>
+</main>
+{% endblock %}

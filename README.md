@@ -324,7 +324,7 @@ class Note(models.Model):
 
 | Campo | Uso |
 |---|---|
-| `CharField(max_length=200)` | Texto curto (`max_length` é **obrigatório**) |
+| `CharField(max_length=200)` | Texto curto. No Django 6 com SQLite/PostgreSQL o `max_length` é opcional, mas use sempre (padrão dos handouts, funciona em qualquer versão) |
 | `TextField()` | Texto sem limite |
 | `BooleanField()` | Verdadeiro/Falso |
 | `IntegerField()`, `FloatField()` | Números |
@@ -743,7 +743,7 @@ class Categoria(models.Model):
         return self.nome
 ```
 
-`CharField` sem `null`/`blank` já é **obrigatório**. `max_length` é obrigatório no `CharField`.
+`CharField` sem `null`/`blank` já é **obrigatório**. O `max_length` é opcional no Django 6 (SQLite/PostgreSQL), mas é boa prática colocar.
 
 ```powershell
 python manage.py makemigrations    # + Create model Categoria

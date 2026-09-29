@@ -17,3 +17,6 @@ class Note(models.Model):
 class Pergunta(models.Model):
     enunciado = models.TextField(null=False)
     resposta_correta = models.BooleanField(null=False)
+
+class Categoria(models.Model):
+    nome = models.CharField()

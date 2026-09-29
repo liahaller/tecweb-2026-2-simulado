@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from .models import Note, Tag, Pergunta
+from .models import Note, Tag, Pergunta, Categoria
 
 def parse_tags(texto):
     tags = []
@@ -62,6 +62,16 @@ def perguntas(request):
     else:
         all_perguntas = Pergunta.objects.all()
         return render(request, 'notes/perguntas.html', {'perguntas':all_perguntas})
+
+def categorias(request):
+    if request.method == 'POST':
+        nome = request.POST.get('nome')
+        categoria = Categoria(nome=nome)
+        categoria.save()
+        return redirect('categorias')
+    else:
+        all_categorias = Categoria.objects.all()
+        return render(request, 'notes/categorias.html', {'categorias':all_categorias})
 
               
 
