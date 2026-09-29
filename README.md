@@ -4,6 +4,7 @@
 > - As seções 1 a 6 são o **resumo** da matéria (comandos, conceitos e como os seus projetos funcionam).
 > - A seção 7 tem o **enunciado resumido do simulado**.
 > - A seção 8 tem a **resolução do simulado**, escondida em blocos recolhidos (clique em "▶" para abrir). **Só abra quando quiser conferir.**
+> - A seção 9 tem **questões de treino** parecidas com as que podem cair na prova, também com a resolução recolhida.
 > - Mais embaixo estão as instruções e regras originais da prova.
 
 ## Sumário
@@ -16,7 +17,8 @@
 6. [Erros comuns e como resolver](#6-erros-comuns-e-como-resolver)
 7. [Simulado: enunciado resumido](#7-simulado-enunciado-resumido)
 8. [Resolução do simulado (spoiler)](#8-resolução-do-simulado-spoiler)
-9. [Checklist para o dia da prova](#9-checklist-para-o-dia-da-prova)
+9. [Possíveis questões da prova (treino)](#9-possíveis-questões-da-prova-treino)
+10. [Checklist para o dia da prova](#10-checklist-para-o-dia-da-prova)
 
 ---
 
@@ -954,7 +956,786 @@ git commit -m "Categoria Finalizada"
 
 ---
 
-## 9. Checklist para o dia da prova
+## 9. Possíveis questões da prova (treino)
+
+> Questões **inventadas** no mesmo estilo do simulado, baseadas no que foi dado em aula (Get-it com socket, SQLite, Django, formulários, relações) e no que os projetos 1A/1B pediam (deletar, editar, favoritar, 404, tags). A prova de verdade pode ser diferente, mas quase sempre é **"adicione uma funcionalidade pequena"** usando as mesmas peças.
+>
+> As resoluções usam o **seu** código atual (nomes de funções, templates e models que já existem). Estão recolhidas: tente sozinha primeiro.
+
+### 9.1 Projeto 1A (servidor com socket, porta 8080)
+
+**A1. Página de detalhe de uma anotação.** Crie a rota `http://localhost:8080/nota/<id>` (ex.: `/nota/3`) que mostra só o título e o conteúdo da anotação daquele id, com um link "Voltar" para `/`. Se o id não existir, mostre a página 404. No card de cada nota da página inicial, o título deve virar um link para essa página. Commit: **"Detalhe da anotação"**.
+
+<details>
+<summary><b>▶ Resolução A1</b></summary>
+
+**`templates/detalhe.html`** (novo):
+
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Get-it</title>
+        <link rel="stylesheet" href="/getit.css" />
+    </head>
+    <body>
+        <main class="container">
+            <h1>{title}</h1>
+            <p>{details}</p>
+            <a class="btn" href="/">Voltar</a>
+        </main>
+    </body>
+</html>
+```
+
+**`views.py`**:
+
+```python
+def detalhe(request, indice):
+    database = Database('notes')
+    nota = database.get_by_id(indice)
+    if nota is None:
+        return not_found()
+    body = load_template('detalhe.html').format(title=nota.title, details=nota.content)
+    return build_response(body=body)
+```
+
+**`servidor.py`**: `from views import ..., detalhe` e um `elif` novo:
+
+```python
+    elif route.startswith('nota/'):
+        response = detalhe(request, route.split('/')[-1])
+```
+
+**`templates/components/note.html`**: troque `{title}` por `<a href="/nota/{id}">{title}</a>`.
+
+- Use `'nota/'` **com a barra** no `startswith`: sem ela, uma rota futura como `notas` também cairia aqui.
+- O id chega como **string** (`'3'`), mas o `get_by_id` funciona porque o SQLite compara `'3'` com `3` sem problema.
+</details>
+
+---
+
+**A2. Contador de anotações.** Na página inicial, acima da lista, mostre a frase `Você tem N anotações`, onde N é o número de anotações salvas. Commit: **"Contador de anotações"**.
+
+<details>
+<summary><b>▶ Resolução A2</b></summary>
+
+**`views.py`** (na função `index`, no final):
+
+```python
+    todas = load_data()
+    note_template = load_template('components/note.html')
+    notes_li = [
+        note_template.format(id=dados.id, title=dados.title, details=dados.content,
+                             estrela='★' if dados.favorite else '☆')
+        for dados in todas
+    ]
+    notes = '\n'.join(notes_li)
+    body = load_template('index.html').format(notes=notes, erro=erro, cor=cor, total=len(todas))
+```
+
+**`templates/index.html`**, logo antes do `<ul class="card-container">`:
+
+```html
+<p>Você tem {total} anotações</p>
+```
+
+- Guardar `load_data()` numa variável evita ir ao banco duas vezes.
+- Esqueceu o `total=` no `.format()`? Dá `KeyError: 'total'`.
+</details>
+
+---
+
+**A3. Busca de anotações.** Na página inicial, adicione um formulário **GET** com um campo `termo`. Ao enviar, o navegador vai para `http://localhost:8080/busca?termo=algo`, e essa página mostra só as anotações cujo título **ou** conteúdo contém o termo (sem diferenciar maiúsculas de minúsculas). Commit: **"Busca implementada"**.
+
+<details>
+<summary><b>▶ Resolução A3</b></summary>
+
+A novidade aqui é a **query string** (`?termo=algo`). Num formulário `method="get"` os dados **não** vão no corpo: vão na própria URL. Por isso o `extract_params` (que lê o corpo do POST) **não serve**.
+
+**`templates/index.html`**, acima do formulário de criar:
+
+```html
+<form method="get" action="/busca">
+    <input type="text" name="termo" placeholder="Buscar..." />
+    <button class="btn" type="submit">Buscar</button>
+</form>
+```
+
+**`views.py`**:
+
+```python
+from urllib.parse import urlparse, parse_qs
+from utils import add_note, load_data, load_template, build_response, extract_params, extract_route
+
+def busca(request):
+    route = extract_route(request)                  # 'busca?termo=Django'
+    query = urlparse(route).query                   # 'termo=Django'
+    termo = parse_qs(query).get('termo', [''])[0]   # 'Django'  (parse_qs já troca + por espaço)
+    termo = termo.lower()
+
+    note_template = load_template('components/note.html')
+    notes_li = [
+        note_template.format(id=n.id, title=n.title, details=n.content,
+                             estrela='★' if n.favorite else '☆')
+        for n in load_data()
+        if termo in n.title.lower() or termo in n.content.lower()
+    ]
+    body = load_template('index.html').format(notes='\n'.join(notes_li), erro='', cor='#FFFFFF')
+    return build_response(body=body)
+```
+
+(Se você fez a A2, passe também `total=len(notes_li)`.)
+
+**`servidor.py`**: `from views import ..., busca` e:
+
+```python
+    elif route.startswith('busca'):
+        response = busca(request)
+```
+
+- `route == 'busca'` **não** funciona, porque a rota vem com a query junto (`busca?termo=...`).
+- O `parse_qs` devolve **listas** (`{'termo': ['Django']}`), por isso o `[0]`.
+</details>
+
+---
+
+**A4. Apagar todas as anotações.** Adicione na página inicial um botão "Apagar tudo" que, ao ser clicado, faz um **POST** para `/apagar-tudo`, apaga todas as anotações do banco e volta para `/`. Commit: **"Apagar todas"**.
+
+<details>
+<summary><b>▶ Resolução A4</b></summary>
+
+**`database.py`** (novo método na classe `Database`):
+
+```python
+    def delete_all(self):
+        self.conn.execute('DELETE FROM note')
+        self.conn.commit()
+```
+
+**`views.py`**:
+
+```python
+def apagar_tudo(request):
+    if request.startswith('POST'):
+        Database('notes').delete_all()
+    return build_response(code=303, headers='Location: /')
+```
+
+**`servidor.py`**: `from views import ..., apagar_tudo` e:
+
+```python
+    elif route == 'apagar-tudo':
+        response = apagar_tudo(request)
+```
+
+**`templates/index.html`**:
+
+```html
+<form method="post" action="/apagar-tudo">
+    <button class="btn" type="submit">Apagar tudo</button>
+</form>
+```
+
+- ⚠️ **Pegadinha da ordem dos `elif`:** se a rota se chamasse `delete-all`, ela cairia no `elif route.startswith('delete')` que já existe (que vem antes) e daria erro. Nesse caso, coloque o `elif route == 'delete-all'` **acima** do `startswith('delete')`.
+- Por que POST e não um link? Link faz GET, e GET não deve apagar nada (um robô ou o pré-carregamento do navegador poderia apagar tudo só visitando a URL).
+- Sem o `.commit()`, o SQLite **não salva** a mudança.
+</details>
+
+---
+
+**A5. Saudação pelo horário.** Crie a rota `http://localhost:8080/saudacao` com um `h1` que diz **"Bom dia"** (antes das 12h), **"Boa tarde"** (12h até 17h59) ou **"Boa noite"** (18h em diante), e um `h2` com a hora atual no formato `HH:MM`. Commit: **"Saudação"**.
+
+<details>
+<summary><b>▶ Resolução A5</b></summary>
+
+**`templates/saudacao.html`**: igual ao `hoje.html`, mas com `<h1>{saudacao}</h1>` e `<h2>{hora}</h2>`.
+
+**`views.py`** (o `import datetime` já existe):
+
+```python
+def saudacao(request):
+    agora = datetime.datetime.now()
+    if agora.hour < 12:
+        texto = 'Bom dia'
+    elif agora.hour < 18:
+        texto = 'Boa tarde'
+    else:
+        texto = 'Boa noite'
+    body = load_template('saudacao.html').format(saudacao=texto, hora=agora.strftime('%H:%M'))
+    return build_response(body=body)
+```
+
+**`servidor.py`**: `from views import ..., saudacao` e `elif route == 'saudacao': response = saudacao(request)`.
+
+- `agora.hour` é um **inteiro** de 0 a 23.
+</details>
+
+---
+
+**A6. Destacar as favoritas (sem JavaScript).** As anotações favoritas devem aparecer com uma **borda dourada** de 4px. Não use JavaScript. Commit: **"Destaque nas favoritas"**.
+
+<details>
+<summary><b>▶ Resolução A6</b></summary>
+
+**Ideia:** a view decide uma **classe CSS** para cada card, e o CSS pinta.
+
+**`templates/components/note.html`**: `<li class="card {classe}">`
+
+**`views.py`** (no `format` do `note_template` dentro do `index`):
+
+```python
+        note_template.format(id=dados.id, title=dados.title, details=dados.content,
+                             estrela='★' if dados.favorite else '☆',
+                             classe='favorita' if dados.favorite else '')
+```
+
+**`getit.css`** (no fim do arquivo):
+
+```css
+.card.favorita {
+  border: 4px solid #FFC300;
+}
+```
+
+- As chaves `{ }` aqui não dão problema porque o `getit.css` é servido direto pelo `read_file`, **sem** `.format()`.
+- Por que borda e não fundo? O `getit.js` sorteia classes `card-color-N` que já mudam o **fundo** de cada card. `.card.favorita` (duas classes) tem prioridade maior que `.card`, por isso a borda aparece mesmo com `border-width: 0` no `.card`.
+- ⚠️ Toda view que usa `components/note.html` precisa passar `classe=` agora (ex.: a `busca` da A3), senão `KeyError: 'classe'`.
+</details>
+
+---
+
+**A7. Ordem alfabética.** As anotações devem aparecer com as **favoritas primeiro** e, dentro de cada grupo, em **ordem alfabética** do título. Commit: **"Ordenação por título"**.
+
+<details>
+<summary><b>▶ Resolução A7</b></summary>
+
+Só uma linha no **`database.py`** (método `get_all`):
+
+```python
+cursor = self.conn.execute("SELECT id, title, content, favorite FROM note ORDER BY favorite DESC, title")
+```
+
+- `ORDER BY a, b`: ordena por `a` e, no empate, por `b`. `DESC` = decrescente (1 antes de 0).
+- Para ignorar maiúsculas: `ORDER BY favorite DESC, title COLLATE NOCASE`.
+</details>
+
+### 9.2 Projeto 1B (Django, porta 8000)
+
+> Todas partem do estado atual do seu projeto: models `Categoria(nome)` e `Pergunta(enunciado, resposta_correta, categoria)`, rotas `perguntas` e `categorias`.
+
+**B1. Detalhe da pergunta.** Crie a rota `http://localhost:8000/perguntas/<id>` que mostra o enunciado, a resposta correta (escrita como "Verdadeiro"/"Falso") e o nome da categoria. Na listagem de `/perguntas`, cada enunciado vira um link para essa página. Se o id não existir, deve dar **404**. Commit: **"Detalhe da pergunta"**.
+
+<details>
+<summary><b>▶ Resolução B1</b></summary>
+
+**`notes/urls.py`**:
+
+```python
+path('perguntas/<int:pergunta_id>', views.pergunta_detail, name='pergunta_detail'),
+```
+
+**`notes/views.py`**:
+
+```python
+from django.shortcuts import render, redirect, get_object_or_404
+
+def pergunta_detail(request, pergunta_id):
+    pergunta = get_object_or_404(Pergunta, id=pergunta_id)
+    return render(request, 'notes/pergunta_detail.html', {'pergunta': pergunta})
+```
+
+**`notes/templates/notes/pergunta_detail.html`** (novo):
+
+```django
+{% extends "notes/base.html" %}
+
+{% block content %}
+<main>
+  <h1>{{ pergunta.enunciado }}</h1>
+  <p>Resposta: {{ pergunta.resposta_correta|yesno:"Verdadeiro,Falso" }}</p>
+  <p>Categoria: {{ pergunta.categoria.nome }}</p>
+  <a href="{% url 'perguntas' %}">Voltar</a>
+</main>
+{% endblock %}
+```
+
+**`perguntas.html`**, dentro do `<li>`:
+
+```django
+<a href="{% url 'pergunta_detail' pergunta.id %}">{{ pergunta.enunciado }}</a>
+```
+
+- `Pergunta.objects.get(id=...)` com id inexistente dá **erro 500** (`DoesNotExist`). O `get_object_or_404` devolve **404**, que é o certo.
+</details>
+
+---
+
+**B2. Deletar pergunta.** Cada item da lista de `/perguntas` ganha um botão "Deletar" que apaga a pergunta (com **POST**) e volta para `/perguntas`. Commit: **"Deletar pergunta"**.
+
+<details>
+<summary><b>▶ Resolução B2</b></summary>
+
+**`notes/urls.py`**:
+
+```python
+path('perguntas/<int:pergunta_id>/delete', views.pergunta_delete, name='pergunta_delete'),
+```
+
+**`notes/views.py`**:
+
+```python
+def pergunta_delete(request, pergunta_id):
+    if request.method == 'POST':
+        pergunta = get_object_or_404(Pergunta, id=pergunta_id)
+        pergunta.delete()
+    return redirect('perguntas')
+```
+
+**`perguntas.html`**, dentro do `<li>`:
+
+```django
+<form method="post" action="{% url 'pergunta_delete' pergunta.id %}">
+  {% csrf_token %}
+  <button type="submit">Deletar</button>
+</form>
+```
+
+- Um `<form>` **por item**, cada um com seu `{% csrf_token %}`.
+- (Extra com JS: `<form ... onsubmit="return confirm('Tem certeza?')">` pede confirmação antes de enviar. Se o `confirm` devolver `false`, o form não é enviado.)
+</details>
+
+---
+
+**B3. Editar pergunta.** Crie a rota `http://localhost:8000/perguntas/<id>/editar` com um formulário **já preenchido** (enunciado, resposta e categoria atuais). Ao salvar, atualiza a pergunta e volta para `/perguntas`. Commit: **"Editar pergunta"**.
+
+<details>
+<summary><b>▶ Resolução B3</b></summary>
+
+**`notes/urls.py`**:
+
+```python
+path('perguntas/<int:pergunta_id>/editar', views.pergunta_update, name='pergunta_update'),
+```
+
+**`notes/views.py`**:
+
+```python
+def pergunta_update(request, pergunta_id):
+    pergunta = get_object_or_404(Pergunta, id=pergunta_id)
+    if request.method == 'POST':
+        pergunta.enunciado = request.POST.get('enunciado')
+        pergunta.resposta_correta = request.POST.get('resposta') == 'Verdadeiro'
+        pergunta.categoria = Categoria.objects.get(id=request.POST.get('categoria'))
+        pergunta.save()
+        return redirect('perguntas')
+    else:
+        return render(request, 'notes/pergunta_edit.html', {
+            'pergunta': pergunta,
+            'categorias': Categoria.objects.all(),
+        })
+```
+
+**`notes/templates/notes/pergunta_edit.html`** (novo):
+
+```django
+{% extends "notes/base.html" %}
+
+{% block content %}
+<main>
+  <form method="post" action="{% url 'pergunta_update' pergunta.id %}">
+    {% csrf_token %}
+    <label for="enunciado">Enunciado</label>
+    <input id="enunciado" type="text" name="enunciado" value="{{ pergunta.enunciado }}" />
+
+    <label for="resposta">Resposta</label>
+    <select id="resposta" name="resposta">
+      <option value="Verdadeiro" {% if pergunta.resposta_correta %}selected{% endif %}>Verdadeiro</option>
+      <option value="Falso" {% if not pergunta.resposta_correta %}selected{% endif %}>Falso</option>
+    </select>
+
+    <label for="categoria">Categoria</label>
+    <select id="categoria" name="categoria">
+      {% for categoria in categorias %}
+        <option value="{{ categoria.id }}" {% if categoria.id == pergunta.categoria.id %}selected{% endif %}>{{ categoria.nome }}</option>
+      {% endfor %}
+    </select>
+
+    <input type="submit" value="Salvar" />
+  </form>
+</main>
+{% endblock %}
+```
+
+- É igual ao `update` das notas: **GET** mostra o form preenchido, **POST** altera o objeto e chama `.save()`.
+- O atributo `selected` marca a opção que já vem escolhida no `<select>`.
+- Editar **não** usa `create`: usa o objeto que já existe e `.save()`. Se usasse `create`, ia duplicar a pergunta.
+</details>
+
+---
+
+**B4. Perguntas de uma categoria.** Em `/categorias`, cada nome vira um link para `http://localhost:8000/categorias/<id>`, que lista **só** as perguntas daquela categoria. Na lista de `/categorias`, mostre também quantas perguntas cada categoria tem, ex.: `História (3)`. Commit: **"Perguntas por categoria"**.
+
+<details>
+<summary><b>▶ Resolução B4</b></summary>
+
+**`notes/urls.py`**:
+
+```python
+path('categorias/<int:categoria_id>', views.categoria_detail, name='categoria_detail'),
+```
+
+**`notes/views.py`**:
+
+```python
+def categoria_detail(request, categoria_id):
+    categoria = get_object_or_404(Categoria, id=categoria_id)
+    perguntas = categoria.perguntas.all()          # acesso reverso, graças ao related_name='perguntas'
+    return render(request, 'notes/categoria_detail.html', {'categoria': categoria, 'perguntas': perguntas})
+```
+
+(Equivalente: `Pergunta.objects.filter(categoria=categoria)`.)
+
+**`notes/templates/notes/categoria_detail.html`** (novo):
+
+```django
+{% extends "notes/base.html" %}
+
+{% block content %}
+<main>
+  <h1>{{ categoria.nome }}</h1>
+  <ul>
+    {% for pergunta in perguntas %}
+      <li>{{ pergunta.enunciado }} ({{ pergunta.resposta_correta|yesno:"Verdadeiro,Falso" }})</li>
+    {% empty %}
+      <li>Nenhuma pergunta nesta categoria.</li>
+    {% endfor %}
+  </ul>
+  <a href="{% url 'categorias' %}">Voltar</a>
+</main>
+{% endblock %}
+```
+
+**`categorias.html`**, dentro do `{% for %}`:
+
+```django
+<li>
+  <a href="{% url 'categoria_detail' categoria.id %}">{{ categoria.nome }}</a>
+  ({{ categoria.perguntas.count }})
+</li>
+```
+
+- No template **não** tem parênteses: `categoria.perguntas.count` (no Python seria `categoria.perguntas.count()`).
+- É o mesmo padrão do `tag_detail` que você já fez (`tag.notes.all()`).
+</details>
+
+---
+
+**B5. Responder a pergunta (quiz).** Crie a rota `http://localhost:8000/quiz/<id>`. No GET, mostra o enunciado e dois botões de rádio (Verdadeiro/Falso). No POST, mostra **"Acertou!"** ou **"Errou!"** comparando com a resposta correta. **Nada é salvo no banco.** Commit: **"Quiz"**.
+
+<details>
+<summary><b>▶ Resolução B5</b></summary>
+
+**`notes/urls.py`**:
+
+```python
+path('quiz/<int:pergunta_id>', views.quiz, name='quiz'),
+```
+
+**`notes/views.py`**:
+
+```python
+def quiz(request, pergunta_id):
+    pergunta = get_object_or_404(Pergunta, id=pergunta_id)
+    resultado = ''
+    if request.method == 'POST':
+        resposta_usuario = request.POST.get('resposta') == 'Verdadeiro'   # vira True/False
+        if resposta_usuario == pergunta.resposta_correta:
+            resultado = 'Acertou!'
+        else:
+            resultado = 'Errou!'
+    return render(request, 'notes/quiz.html', {'pergunta': pergunta, 'resultado': resultado})
+```
+
+**`notes/templates/notes/quiz.html`** (novo):
+
+```django
+{% extends "notes/base.html" %}
+
+{% block content %}
+<main>
+  <h1>{{ pergunta.enunciado }}</h1>
+  <form method="post" action="{% url 'quiz' pergunta.id %}">
+    {% csrf_token %}
+    <label><input type="radio" name="resposta" value="Verdadeiro" required /> Verdadeiro</label>
+    <label><input type="radio" name="resposta" value="Falso" /> Falso</label>
+    <input type="submit" value="Responder" />
+  </form>
+  {% if resultado %}<h2>{{ resultado }}</h2>{% endif %}
+</main>
+{% endblock %}
+```
+
+- Aqui dá para usar **`render` depois do POST** porque **nada foi salvo**: reenviar com F5 não estraga nada. A regra "POST → redirect" é para quando o POST **altera o banco**.
+- Rádios com o **mesmo `name`** formam um grupo: só dá para marcar um, e o que vai para o servidor é o `value` do marcado.
+</details>
+
+---
+
+**B6. Validação do formulário de perguntas.** Em `/perguntas`, **não** salve a pergunta se o enunciado estiver vazio ou se a resposta não for exatamente "Verdadeiro" ou "Falso". Nesse caso, mostre a mensagem `Preencha o enunciado e responda Verdadeiro ou Falso.` acima do formulário. Commit: **"Validação de perguntas"**.
+
+<details>
+<summary><b>▶ Resolução B6</b></summary>
+
+**`notes/views.py`** (substitui a view `perguntas`):
+
+```python
+def perguntas(request):
+    erro = ''
+    if request.method == 'POST':
+        enunciado = request.POST.get('enunciado', '').strip()
+        resposta = request.POST.get('resposta', '').strip()
+        if not enunciado or resposta not in ['Verdadeiro', 'Falso']:
+            erro = 'Preencha o enunciado e responda Verdadeiro ou Falso.'
+        else:
+            categoria = Categoria.objects.get(id=request.POST.get('categoria'))
+            Pergunta.objects.create(enunciado=enunciado,
+                                    resposta_correta=(resposta == 'Verdadeiro'),
+                                    categoria=categoria)
+            return redirect('perguntas')
+    return render(request, 'notes/perguntas.html', {
+        'perguntas': Pergunta.objects.all(),
+        'categorias': Categoria.objects.all(),
+        'erro': erro,
+    })
+```
+
+**`perguntas.html`**, antes do `<form>`:
+
+```django
+{% if erro %}<p class="erro">{{ erro }}</p>{% endif %}
+```
+
+- Repare que o `render` saiu do `else`: ele roda tanto no GET quanto num POST **inválido** (para mostrar o erro). Só o POST **válido** faz `redirect`.
+- É a mesma ideia da validação do 1A (`erro = '<p class="erro">...'`).
+- Uma validação só no HTML (`required`) é fácil de burlar; a da view é a que garante.
+</details>
+
+---
+
+**B7. Data de criação.** Adicione ao model `Pergunta` o campo `criado_em`, preenchido **automaticamente** com a data/hora de criação. A lista de `/perguntas` deve mostrar a data no formato `dd/mm/aaaa hh:mm` e as perguntas mais **recentes primeiro**. Commit: **"Data de criação"**.
+
+<details>
+<summary><b>▶ Resolução B7</b></summary>
+
+**`notes/models.py`**:
+
+```python
+class Pergunta(models.Model):
+    enunciado = models.TextField(null=False)
+    resposta_correta = models.BooleanField(null=False)
+    categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE, related_name='perguntas')
+    criado_em = models.DateTimeField(auto_now_add=True)
+```
+
+**Migração:** como já existem perguntas, o Django pergunta o que colocar nelas:
+
+```
+It is impossible to add the field 'criado_em' with 'auto_now_add=True' to pergunta without providing a default...
+ 1) Provide a one-off default now which will be set on all existing rows
+ 2) Quit and manually define a default value in models.py.
+Select an option: 1
+Please enter the default value as valid Python.
+Accept the default 'timezone.now' by pressing 'Enter' ...
+>>>            ← só aperte Enter
+```
+
+```powershell
+python manage.py makemigrations
+python manage.py migrate
+```
+
+**`notes/views.py`** (no `else` da view `perguntas`):
+
+```python
+all_perguntas = Pergunta.objects.order_by('-criado_em')    # o "-" inverte: mais novo primeiro
+```
+
+**`perguntas.html`**, dentro do `<li>`:
+
+```django
+{{ pergunta.criado_em|date:"d/m/Y H:i" }}
+```
+
+- `auto_now_add=True`: preenche **uma vez**, ao criar. `auto_now=True`: atualiza **toda vez** que salva (serve para "última edição").
+- O `|date:"..."` é um **filtro** de template; os códigos são parecidos com os do `strftime`.
+- ⚠️ **Hora 3h adiantada?** O seu `settings.py` está com `TIME_ZONE = 'UTC'`. Para mostrar o horário de Brasília, troque para `TIME_ZONE = 'America/Sao_Paulo'` (não precisa migrar).
+</details>
+
+---
+
+**B8. Muitos para muitos: Prova.** Crie o model `Prova` com `titulo` (`CharField`, obrigatório) e uma relação **muitos para muitos** com `Pergunta` (uma prova tem várias perguntas e uma pergunta pode estar em várias provas). Na rota `http://localhost:8000/provas`, faça um formulário com o título e um `<select multiple name="perguntas">` com todas as perguntas, e abaixo a lista de provas com as perguntas de cada uma. Commit: **"Cadastro de provas"**.
+
+<details>
+<summary><b>▶ Resolução B8</b></summary>
+
+**`notes/models.py`** (embaixo de `Pergunta`):
+
+```python
+class Prova(models.Model):
+    titulo = models.CharField(max_length=200)
+    perguntas = models.ManyToManyField(Pergunta, related_name='provas')
+
+    def __str__(self):
+        return self.titulo
+```
+
+```powershell
+python manage.py makemigrations
+python manage.py migrate
+```
+
+(Não pergunta default: o `ManyToManyField` cria uma **tabela intermediária** nova, não mexe nas linhas de `Pergunta`.)
+
+**`notes/views.py`**:
+
+```python
+from .models import Note, Tag, Pergunta, Categoria, Prova
+
+def provas(request):
+    if request.method == 'POST':
+        prova = Prova.objects.create(titulo=request.POST.get('titulo'))
+        prova.perguntas.set(request.POST.getlist('perguntas'))    # lista de ids: ['1', '3']
+        return redirect('provas')
+    else:
+        return render(request, 'notes/provas.html', {
+            'provas': Prova.objects.all(),
+            'perguntas': Pergunta.objects.all(),
+        })
+```
+
+**`notes/urls.py`**:
+
+```python
+path('provas', views.provas, name='provas'),
+```
+
+**`notes/templates/notes/provas.html`** (novo):
+
+```django
+{% extends "notes/base.html" %}
+
+{% block content %}
+<main>
+  <form method="post" action="{% url 'provas' %}">
+    {% csrf_token %}
+    <label for="titulo">Título</label>
+    <input id="titulo" type="text" name="titulo" required />
+    <label for="perguntas">Perguntas (Ctrl+clique para escolher várias)</label>
+    <select id="perguntas" name="perguntas" multiple>
+      {% for pergunta in perguntas %}
+        <option value="{{ pergunta.id }}">{{ pergunta.enunciado }}</option>
+      {% endfor %}
+    </select>
+    <input type="submit" value="Criar" />
+  </form>
+
+  <ul>
+    {% for prova in provas %}
+      <li>
+        {{ prova.titulo }}
+        <ul>
+          {% for pergunta in prova.perguntas.all %}
+            <li>{{ pergunta.enunciado }}</li>
+          {% endfor %}
+        </ul>
+      </li>
+    {% endfor %}
+  </ul>
+</main>
+{% endblock %}
+```
+
+- ⚠️ **`getlist`**, não `get`: com várias opções marcadas, o navegador envia `perguntas=1&perguntas=3`. O `.get('perguntas')` pega **só a última**.
+- A prova precisa estar **salva** (ter id) antes do `.set(...)`. O `create` já salva.
+- `.set()` aceita objetos **ou** ids.
+- Compare com as tags das notas: é exatamente o mesmo padrão (`note.tags.set(...)`).
+</details>
+
+---
+
+**B9. Admin.** Registre `Categoria` e `Pergunta` no admin. No admin, uma categoria deve aparecer pelo **nome** e uma pergunta pelo **enunciado** (e não como `Categoria object (1)`). Commit: **"Admin"**.
+
+<details>
+<summary><b>▶ Resolução B9</b></summary>
+
+**`notes/admin.py`**:
+
+```python
+from django.contrib import admin
+from .models import Note, Tag, Categoria, Pergunta
+
+admin.site.register(Note)
+admin.site.register(Tag)
+admin.site.register(Categoria)
+admin.site.register(Pergunta)
+```
+
+**`notes/models.py`**: adicione `__str__` nas duas classes:
+
+```python
+class Categoria(models.Model):
+    nome = models.CharField()
+
+    def __str__(self):
+        return self.nome
+
+class Pergunta(models.Model):
+    ...
+    def __str__(self):
+        return self.enunciado
+```
+
+- `__str__` **não** muda o banco, então **não** precisa de migração.
+- Acesso: `python manage.py createsuperuser` e http://localhost:8000/admin.
+</details>
+
+### 9.3 Perguntas teóricas (arguição oral)
+
+A prova pode ter arguição oral sobre o que você fez. Treine responder em voz alta:
+
+<details>
+<summary><b>▶ Perguntas e respostas</b></summary>
+
+| Pergunta | Resposta curta |
+|---|---|
+| Qual a diferença entre GET e POST? | GET **pede** uma página (dados vão na URL, ex.: `?termo=x`). POST **envia** dados no **corpo** da requisição, usado para criar/alterar/apagar. |
+| Por que redirecionar depois de um POST? | Para a última requisição virar um GET. Senão, o F5 reenvia o formulário e duplica o dado. |
+| O que é status 303 / 302? E 404? | 302/303: redirect, o navegador vai para a URL do cabeçalho `Location`. 404: rota não encontrada. |
+| Como o servidor do 1A sabe qual página mostrar? | O `extract_route` pega a rota da 1ª linha da request e o `servidor.py` compara com `if/elif`, chamando a view certa. |
+| Por que no 1A as chaves do CSS precisam ser duplicadas no template? | Porque o `.format()` trata `{...}` como marcador. `{{` e `}}` viram `{` e `}` literais. |
+| Por que usar `?` no SQL em vez de montar a string? | Evita **SQL injection**: o valor é tratado como dado, nunca como comando. |
+| Para que serve o `.commit()`? | Confirmar a alteração no banco. Sem ele, INSERT/UPDATE/DELETE não são gravados. |
+| O que é ORM? | Mapear tabelas em classes Python: `Pergunta.objects.filter(...)` em vez de escrever SQL. |
+| Qual a diferença entre `makemigrations` e `migrate`? | `makemigrations` **gera** o arquivo de migração a partir do `models.py`. `migrate` **aplica** no banco. |
+| `null=True` × `blank=True`? | `null`: o **banco** aceita vazio. `blank`: os **formulários** do Django aceitam vazio. |
+| Onde fica a `ForeignKey` numa relação um para muitos? | No lado "muitos" (a `Pergunta` tem a `categoria`). No banco vira a coluna `categoria_id`. |
+| O que faz `on_delete=models.CASCADE`? | Apagar a categoria apaga as perguntas dela. |
+| Para que serve o `related_name`? | Nomear o acesso reverso: `categoria.perguntas.all()`. |
+| `ForeignKey` × `ManyToManyField`? | FK: cada pergunta tem **uma** categoria. M2M: cada nota tem **várias** tags e cada tag tem **várias** notas (cria tabela intermediária). |
+| Para que serve o `{% csrf_token %}`? | Proteção contra **CSRF**: garante que o POST veio de um formulário do próprio site. Sem ele, o Django responde 403. |
+| `render` × `redirect`? | `render` devolve HTML (200). `redirect` devolve 302 mandando o navegador para outra URL. |
+| O que é `{% extends %}` e `{% block %}`? | Herança de templates: o `base.html` tem o esqueleto e os filhos preenchem o `block content`. |
+| Para que serve o ambiente virtual (`env`)? | Isolar as bibliotecas (Django etc.) do projeto das do resto do computador. |
+| Por que na prova usar SQLite e `DEBUG = True`? | SQLite é um arquivo local, não precisa do Docker/PostgreSQL. `DEBUG = True` mostra os erros detalhados e serve os arquivos estáticos. |
+| Qual a vantagem do Django sobre o servidor do 1A? | Roteamento, ORM, migrations, admin, templates, CSRF e tratamento de formulários prontos; o 1A fazia tudo na mão (e só lia 1024 bytes da request). |
+| Por que mudar a cor no Python e não no JS (simulado)? | Porque o enunciado proibiu JS: o servidor sorteia a cor a cada request e já manda o HTML pronto. |
+</details>
+
+---
+
+## 10. Checklist para o dia da prova
 
 - [ ] Abrir o VS Code na pasta da prova e conferir `git status`.
 - [ ] **1A:** `cd` na pasta do projeto, `python servidor.py`, testar em **aba anônima**, reiniciar a cada mudança em `.py`.
