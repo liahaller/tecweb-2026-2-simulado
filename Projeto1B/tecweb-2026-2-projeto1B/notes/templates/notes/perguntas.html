@@ -1,0 +1,16 @@
+{% extends "notes/base.html" %}
+{% load static %}
+
+{% block content %}
+
+<main>
+  <form method="post" action="{% url 'perguntas' %}" >
+    {% csrf_token %}
+    <label for="enunciado">Enunciado</label>
+    <input type="text" name="enunciado"/>
+    <label for="resposta">Resposta</label>
+    <input name="resposta"/>
+    <input class="btn" type="submit" value="Criar"/>
+  </form>
+</main>
+{% endblock %}

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from .models import Note, Tag
+from .models import Note, Tag, Pergunta
 
 def parse_tags(texto):
     tags = []
@@ -47,6 +47,22 @@ def tag_detail(request, tag_id):
     tag = Tag.objects.get(id=tag_id)
     notes = tag.notes.all()
     return render(request, 'notes/tag_detail.html', {'tag': tag, 'notes': notes})
+
+def perguntas(request):
+    if request.method == 'POST':
+        enunciado = request.POST.get('enunciado')
+        resposta = request.POST.get('resposta')
+        if resposta == 'Verdadeiro':
+            resposta = True
+        else:
+            resposta = False
+        pergunta = Pergunta(enunciado=enunciado, resposta_correta=resposta)
+        pergunta.save()
+        return redirect('perguntas')
+    else:
+        return render(request, 'notes/perguntas.html')
+
+              
 
 
 

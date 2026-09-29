@@ -403,6 +403,28 @@ def index(request):
 - `request.POST.get('x')` sempre devolve **string** (ou `None`). Converter é com você: `int(...)`, `== 'Verdadeiro'` etc.
 - O 3º argumento do `render` (dicionário) é o **contexto**: as chaves viram variáveis no template.
 
+#### `render` × `redirect`
+
+| | `render` | `redirect` |
+|---|---|---|
+| Frase | "Toma aqui a página" | "Vai lá buscar em outro lugar" |
+| O que devolve | HTML pronto (template + dados), status **200** | Só um status **302** com `Location: /rota` (sem HTML) |
+| URL no navegador | Não muda | Muda para a nova rota |
+| Quando usar | **Mostrar** uma página (GET) | **Depois de salvar/editar/apagar** (POST) |
+| Precisa de template? | Sim | Não, só o nome da rota (`name=`) |
+
+Fluxo de um formulário:
+
+```
+1. Usuário envia o form        → POST /perguntas
+2. View salva e redireciona    ← 302, Location: /perguntas   (redirect)
+3. Navegador faz sozinho       → GET /perguntas
+4. View mostra a página        ← 200, HTML com a lista atualizada   (render)
+```
+
+- **Por que não dar `render` direto depois do POST?** Se a última requisição foi um POST, o F5 **reenvia o formulário** e o dado é salvo **duas vezes**. Com o `redirect`, a última requisição passa a ser um GET e o F5 só recarrega a página.
+- **No Projeto 1A** a mesma ideia foi feita na mão: `build_response(code=303, headers='Location: /')` é um redirect.
+
 ### 5.7 Templates (linguagem de template do Django)
 
 ```django
@@ -486,8 +508,11 @@ admin.site.register(Note)
 | **Django:** `NameError: Pergunta` | Não importou o model na view | `from .models import ..., Pergunta` |
 | **Django:** `NameError: Categoria` em `models.py` | `ForeignKey(Categoria)` antes de `Categoria` existir | Declare `Categoria` **acima**, ou use `'Categoria'` entre aspas |
 | **Django:** `RuntimeError ... APPEND_SLASH` | POST para `/rota` mas a rota é `rota/` | Deixe a URL do `path` igual à do `action` |
+| **Django:** tirei a barra do `path` (`'rota/'` → `'rota'`) e deu 404 em `/rota/` | Antes, `/rota` respondia **301** para `/rota/`, e o navegador **guarda o 301 no cache** e continua redirecionando | Teste numa **aba anônima nova** (ou limpe o cache) |
+| **Django:** `Reverse for 'x' with arguments '('',)' not found` | `{% url 'x' objeto.id %}` com um objeto que não existe no contexto (ou rota errada) | Confira o nome da rota e se a variável foi passada no `render` |
 | **Django:** `IntegrityError NOT NULL` | Campo obrigatório vazio | Envie o valor ou ajuste o model |
 | **Django:** `ModuleNotFoundError: django` | `env` não ativado | `.\env\Scripts\Activate.ps1` |
+| **Django:** `ModuleNotFoundError: dj_database_url` (em qualquer comando do `manage.py`) | Pacote do deploy não instalado no `env` (o `settings.py` importa ele) | `pip install -r requirements.txt` (ou `pip install dj-database-url`) e confira com `pip list` |
 | **Django:** `That port is already in use` | Outro runserver aberto | Feche o outro terminal ou use `runserver 8001` |
 
 ---
